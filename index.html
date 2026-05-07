@@ -33,7 +33,10 @@ label{display:block;margin:16px 0 6px;font-size:13px;color:#aaa;text-transform:u
 .equipo-fila{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #2a2a2a}
 .equipo-fila .nombre{flex:1;font-size:15px;font-weight:600}
 .equipo-fila .ref{font-size:11px;color:#888;display:block;margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
-.equipo-fila input{width:120px;text-align:center;font-weight:700;font-size:18px}
+.temp-wrap{display:flex;align-items:stretch;gap:0;width:140px;flex-shrink:0}
+.temp-wrap .btn-signo{width:38px;background:var(--gris);color:var(--verde);border:2px solid #333;border-right:none;font-weight:900;font-size:16px;cursor:pointer;font-family:inherit;padding:0;letter-spacing:0}
+.temp-wrap .btn-signo:active{background:#2a2a2a}
+.temp-wrap input{flex:1;padding:14px 8px;text-align:center;font-weight:700;font-size:18px}
 .equipo-fila input.alerta{border-color:var(--rojo);background:rgba(255,59,59,.15);color:var(--rojo)}
 .alerta-banner{background:var(--rojo);color:white;padding:14px;font-weight:700;margin:14px 0;font-size:14px}
 .alerta-banner ul{margin:8px 0 0 18px;font-weight:500}
@@ -52,6 +55,15 @@ label{display:block;margin:16px 0 6px;font-size:13px;color:#aaa;text-transform:u
 .r07-cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .r07-cab strong{color:var(--verde);font-size:12px;letter-spacing:.1em}
 .btn-quitar{background:none;border:none;color:var(--rojo);font-weight:700;cursor:pointer;font-size:13px}
+.exito-tick{width:120px;height:120px;border-radius:50%;background:var(--verde);color:var(--negro);display:flex;align-items:center;justify-content:center;font-size:80px;font-weight:900;margin:30px auto 24px;line-height:1}
+.exito-titulo{text-align:center;font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;margin-bottom:8px;color:var(--verde)}
+.exito-sub{text-align:center;color:#aaa;font-size:14px;margin-bottom:24px}
+.exito-card{background:var(--gris);padding:18px;margin-bottom:24px;border-left:4px solid var(--verde)}
+.exito-card .codigo{font-size:11px;color:var(--verde);text-transform:uppercase;letter-spacing:.15em;font-weight:800;margin-bottom:6px}
+.exito-card .nombre{font-size:18px;font-weight:800;margin-bottom:14px}
+.exito-card .resumen{list-style:none;padding:0}
+.exito-card .resumen li{padding:6px 0;font-size:14px;color:var(--crema);border-bottom:1px solid #2a2a2a}
+.exito-card .resumen li:last-child{border:none}
 </style>
 </head>
 <body>
@@ -89,6 +101,17 @@ label{display:block;margin:16px 0 6px;font-size:13px;color:#aaa;text-transform:u
 <div id="p4-formulario"></div>
 <div id="p4-alerta" class="hidden"></div>
 <button class="btn" id="btn-guardar" style="margin-top:28px">Guardar registro</button>
+</section>
+<section id="p5" class="hidden">
+<div class="exito-tick">✓</div>
+<h1 class="exito-titulo">Registro guardado</h1>
+<p class="exito-sub" id="p5-hora"></p>
+<div class="exito-card">
+<div class="codigo" id="p5-codigo"></div>
+<div class="nombre" id="p5-titulo"></div>
+<ul class="resumen" id="p5-resumen"></ul>
+</div>
+<button class="btn" id="p5-btn-volver">← Volver a la lista</button>
 </section>
 </div>
 <div id="toast" class="toast hidden"></div>
