@@ -1,9 +1,9 @@
-/* TGB APPCC - Frontend Tanda 1+2 (R04, R05, R07, R02, R08, R10) - v1.3 (batch) */
+/* TGB APPCC - Frontend Tanda 1+2+3 (R04, R05, R07, R02, R08, R10, R09) - v1.4 (batch) */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYS3T8NpXq2FYSmoA_6RouqTczhTSVPJwwj1IK0mkbpb5Vwzfh5nyQd3FzUJ-N7r37Iw/exec';
 
 const state = { local: null, encargado: null, estadoDia: {}, configEquipos: [], registroActual: null };
-const REGISTROS_DEFINIDOS = ['R02','R04','R05','R07','R08','R10'];
+const REGISTROS_DEFINIDOS = ['R02','R04','R05','R07','R08','R09','R10'];
 const TODOS_REGISTROS = [
 { cod:'R01', nombre:'Formación de personal', frec:'Eventual' },
 { cod:'R02', nombre:'Limpieza y desinfección', frec:'Diaria' },
@@ -251,6 +251,7 @@ else if (cod === 'R04') pintarFormR04(cont);
 else if (cod === 'R05') pintarFormR05(cont);
 else if (cod === 'R07') pintarFormR07(cont);
 else if (cod === 'R08') pintarFormR08(cont);
+else if (cod === 'R09') pintarFormR09(cont);
 else if (cod === 'R10') pintarFormR10(cont);
 mostrarPantalla('p4');
 }
@@ -464,6 +465,7 @@ if (cod === 'R04') return guardarR04();
 if (cod === 'R05') return guardarR05();
 if (cod === 'R07') return guardarR07();
 if (cod === 'R08') return guardarR08();
+if (cod === 'R09') return guardarR09();
 if (cod === 'R10') return guardarR10();
 });
 
@@ -716,6 +718,128 @@ const resumen = ['Cloro libre: ' + libreT + ' mg/L', 'Cloro combinado: ' + combT
 if (fueraRango.length > 0) { resumen.push('⚠ ' + fueraRango.length + ' fuera de rango'); }
 else resumen.push('✓ Todos los valores dentro de rango');
 enviar({ accion:'guardar', codigo:'R10', local: state.local, encargado: state.encargado, datos: datos }, 'R10', 'Cloro y pH del agua', horaAhora(), resumen);
+}
+
+
+const R09_TIPOS = [
+  'Mantenimiento preventivo',
+  'Mantenimiento correctivo (avería)',
+  'Incidencia sanitaria',
+  'Incidencia con producto',
+  'Incidencia con cliente',
+  'Plaga / control de plagas',
+  'Limpieza extraordinaria',
+  'Otros'
+];
+const R09_EQUIPOS = [
+  'Cámara frigorífica',
+  'Arcón congelador',
+  'Vitrina expositora',
+  'Plancha',
+  'Freidora',
+  'Horno',
+  'Microondas',
+  'Lavavajillas',
+  'Fregaderos / grifería',
+  'Aire acondicionado',
+  'Suelo / paredes / techos',
+  'Iluminación',
+  'Sistema eléctrico',
+  'Otro'
+];
+const R09_MEDIDAS = [
+  'Reparado in situ por el equipo',
+  'Avisada empresa externa',
+  'Sustituido / repuesto',
+  'Pendiente de reparación',
+  'Resuelto sin intervención',
+  'Otro'
+];
+
+function pintarFormR09(cont) {
+  let h = '<div class="r09-form">';
+  h += '<label class="lbl">Tipo</label>';
+  h += '<select id="r09-tipo" class="sel"><option value="">— Selecciona —</option>';
+  R09_TIPOS.forEach(t => { h += '<option>' + t + '</option>'; });
+  h += '</select>';
+
+  h += '<label class="lbl">Equipo / Instalación</label>';
+  h += '<select id="r09-equipo" class="sel"><option value="">— Selecciona —</option>';
+  R09_EQUIPOS.forEach(t => { h += '<option>' + t + '</option>'; });
+  h += '</select>';
+  h += '<input type="text" id="r09-equipo-otro" class="txt hidden" placeholder="Especifica el equipo / instalación">';
+
+  h += '<label class="lbl">Detalles</label>';
+  h += '<textarea id="r09-detalles" class="txt" rows="3" placeholder="Describe el problema o la actuación realizada"></textarea>';
+
+  h += '<label class="lbl">Medida adoptada</label>';
+  h += '<select id="r09-medida" class="sel"><option value="">— Selecciona —</option>';
+  R09_MEDIDAS.forEach(t => { h += '<option>' + t + '</option>'; });
+  h += '</select>';
+  h += '<input type="text" id="r09-medida-otro" class="txt hidden" placeholder="Especifica la medida">';
+
+  h += '<label class="lbl"><input type="checkbox" id="r09-chk-ext"> Intervino empresa externa</label>';
+  h += '<div id="r09-ext-box" class="hidden">';
+  h += '<input type="text" id="r09-empresa" class="txt" placeholder="Empresa externa">';
+  h += '<input type="text" id="r09-albaran" class="txt" placeholder="Nº de albarán / referencia (opcional)">';
+  h += '</div>';
+  h += '</div>';
+  cont.innerHTML = h;
+
+  const selEq = document.getElementById('r09-equipo');
+  const inpEqOtro = document.getElementById('r09-equipo-otro');
+  selEq.addEventListener('change', () => {
+    if (selEq.value === 'Otro') inpEqOtro.classList.remove('hidden');
+    else { inpEqOtro.classList.add('hidden'); inpEqOtro.value = ''; }
+  });
+
+  const selMed = document.getElementById('r09-medida');
+  const inpMedOtro = document.getElementById('r09-medida-otro');
+  const chkExt = document.getElementById('r09-chk-ext');
+  const extBox = document.getElementById('r09-ext-box');
+  selMed.addEventListener('change', () => {
+    if (selMed.value === 'Otro') inpMedOtro.classList.remove('hidden');
+    else { inpMedOtro.classList.add('hidden'); inpMedOtro.value = ''; }
+    if (selMed.value === 'Avisada empresa externa') {
+      chkExt.checked = true;
+      extBox.classList.remove('hidden');
+    }
+  });
+  chkExt.addEventListener('change', () => {
+    if (chkExt.checked) extBox.classList.remove('hidden');
+    else { extBox.classList.add('hidden'); document.getElementById('r09-empresa').value = ''; document.getElementById('r09-albaran').value = ''; }
+  });
+}
+
+function guardarR09() {
+  const tipo = document.getElementById('r09-tipo').value;
+  const equipoSel = document.getElementById('r09-equipo').value;
+  const equipoOtro = document.getElementById('r09-equipo-otro').value.trim();
+  const equipo = equipoSel === 'Otro' ? equipoOtro : equipoSel;
+  const detalles = document.getElementById('r09-detalles').value.trim();
+  const medidaSel = document.getElementById('r09-medida').value;
+  const medidaOtro = document.getElementById('r09-medida-otro').value.trim();
+  const medida = medidaSel === 'Otro' ? medidaOtro : medidaSel;
+  const chkExt = document.getElementById('r09-chk-ext').checked;
+  const empresa = chkExt ? document.getElementById('r09-empresa').value.trim() : '';
+  const albaran = chkExt ? document.getElementById('r09-albaran').value.trim() : '';
+
+  if (!tipo) { toast('Selecciona el Tipo', true); return; }
+  if (!equipo) { toast('Selecciona el Equipo / Instalación', true); return; }
+  if (!detalles) { toast('Rellena los Detalles', true); return; }
+  if (!medida) { toast('Selecciona la Medida adoptada', true); return; }
+
+  const datos = {
+    'Tipo': tipo,
+    'Equipo_Instalacion': equipo,
+    'Detalles': detalles,
+    'Medida_Adoptada': medida,
+    'Empresa_Externa': empresa,
+    'Albaran': albaran
+  };
+  const resumen = ['Tipo: ' + tipo, 'Equipo: ' + equipo, 'Medida: ' + medida];
+  if (empresa) resumen.push('Empresa: ' + empresa + (albaran ? ' (alb. ' + albaran + ')' : ''));
+  enviar({ accion:'guardar', codigo:'R09', local: state.local, encargado: state.encargado, datos: datos }, 'R09', 'Mantenimiento e incidencias', horaAhora(), resumen);
 }
 
 document.addEventListener('click', e => {
