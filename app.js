@@ -1,9 +1,9 @@
-/* TGB APPCC - Frontend Tanda 1+2+3 (R04, R05, R07, R02, R08, R10, R09) - v1.4 (batch) */
+/* TGB APPCC - Frontend Tanda 1+2+3+4 (R04, R05, R07, R02, R08, R10, R09, R06) - v1.5 (batch) */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYS3T8NpXq2FYSmoA_6RouqTczhTSVPJwwj1IK0mkbpb5Vwzfh5nyQd3FzUJ-N7r37Iw/exec';
 
 const state = { local: null, encargado: null, estadoDia: {}, configEquipos: [], registroActual: null };
-const REGISTROS_DEFINIDOS = ['R02','R04','R05','R07','R08','R09','R10'];
+const REGISTROS_DEFINIDOS = ['R02','R04','R05','R06','R07','R08','R09','R10'];
 const TODOS_REGISTROS = [
 { cod:'R01', nombre:'Formación de personal', frec:'Eventual' },
 { cod:'R02', nombre:'Limpieza y desinfección', frec:'Diaria' },
@@ -251,6 +251,7 @@ else if (cod === 'R04') pintarFormR04(cont);
 else if (cod === 'R05') pintarFormR05(cont);
 else if (cod === 'R07') pintarFormR07(cont);
 else if (cod === 'R08') pintarFormR08(cont);
+else if (cod === 'R06') pintarFormR06(cont);
 else if (cod === 'R09') pintarFormR09(cont);
 else if (cod === 'R10') pintarFormR10(cont);
 mostrarPantalla('p4');
@@ -465,6 +466,7 @@ if (cod === 'R04') return guardarR04();
 if (cod === 'R05') return guardarR05();
 if (cod === 'R07') return guardarR07();
 if (cod === 'R08') return guardarR08();
+if (cod === 'R06') return guardarR06();
 if (cod === 'R09') return guardarR09();
 if (cod === 'R10') return guardarR10();
 });
@@ -718,6 +720,174 @@ const resumen = ['Cloro libre: ' + libreT + ' mg/L', 'Cloro combinado: ' + combT
 if (fueraRango.length > 0) { resumen.push('⚠ ' + fueraRango.length + ' fuera de rango'); }
 else resumen.push('✓ Todos los valores dentro de rango');
 enviar({ accion:'guardar', codigo:'R10', local: state.local, encargado: state.encargado, datos: datos }, 'R10', 'Cloro y pH del agua', horaAhora(), resumen);
+}
+
+
+function semanaISO(d) {
+  d = d || new Date();
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((t - yearStart) / 86400000) + 1) / 7);
+  return { semana: weekNo, anyo: t.getUTCFullYear(), texto: 'Sem ' + weekNo + ' - ' + t.getUTCFullYear() };
+}
+
+function pintarFormR06(cont) {
+  const equipos = state.configEquipos.filter(e => e.tipo === 'R04');
+  const sem = semanaISO();
+  cont.innerHTML = '<label>Semana</label><input type="text" id="r06-semana" value="' + sem.texto + '" readonly>';
+
+  const sec = document.createElement('div');
+  sec.className = 'seccion-titulo';
+  sec.textContent = 'Verificación de equipos de frío (3 posiciones por equipo)';
+  cont.appendChild(sec);
+
+  equipos.forEach((eq, idx) => {
+    const f = document.createElement('div');
+    f.className = 'r06-equipo';
+    f.dataset.idx = idx;
+    f.dataset.equipo = eq.equipo;
+    f.dataset.referencia = eq.referencia;
+    f.innerHTML =
+      '<div class="r06-cab"><div class="r06-nombre">' + eq.equipo + '<span class="ref">Ref: ' + eq.referencia + '°C</span></div>'
+      + '<div class="r06-estado" id="r06-est-' + idx + '">—</div></div>'
+      + '<div class="r06-pos">'
+      +   '<div class="r06-pos-col"><div class="r06-pos-lbl">Arriba</div>' + htmlInputTempR06(idx, 1) + '</div>'
+      +   '<div class="r06-pos-col"><div class="r06-pos-lbl">Centro</div>' + htmlInputTempR06(idx, 2) + '</div>'
+      +   '<div class="r06-pos-col"><div class="r06-pos-lbl">Abajo</div>'  + htmlInputTempR06(idx, 3) + '</div>'
+      + '</div>'
+      + '<div class="r06-media" id="r06-media-' + idx + '"></div>';
+    cont.appendChild(f);
+  });
+
+  cont.insertAdjacentHTML('beforeend', '<label>Observaciones (opcional)</label><textarea id="r06-obs" rows="2" placeholder="Observaciones generales de la verificación..."></textarea>');
+
+  activarBotonesSigno(cont);
+  cont.querySelectorAll('input[data-r06-idx]').forEach(inp => {
+    inp.addEventListener('input', () => recalcularR06(inp.dataset.r06Idx));
+  });
+}
+
+function htmlInputTempR06(idx, pos) {
+  return '<div class="temp-wrap">'
+    + '<button type="button" class="btn-signo">+/-</button>'
+    + '<input type="text" inputmode="decimal" pattern="-?[0-9]*[.,]?[0-9]*" data-r06-idx="' + idx + '" data-r06-pos="' + pos + '" placeholder="°C">'
+    + '</div>';
+}
+
+function recalcularR06(idx) {
+  const fila = document.querySelector('.r06-equipo[data-idx="' + idx + '"]');
+  if (!fila) return;
+  const ref = fila.dataset.referencia;
+  const inputs = fila.querySelectorAll('input[data-r06-idx]');
+  const vals = [];
+  let vacios = 0;
+  inputs.forEach(i => {
+    const v = i.value.replace(',', '.').trim();
+    if (v === '' || v === '-') { vacios++; return; }
+    const n = parseFloat(v);
+    if (!isNaN(n)) vals.push(n);
+  });
+  const elMedia = document.getElementById('r06-media-' + idx);
+  const elEst = document.getElementById('r06-est-' + idx);
+  if (vals.length < 3) {
+    elMedia.textContent = '';
+    elEst.textContent = '—';
+    elEst.className = 'r06-estado';
+    fila.classList.remove('r06-noconforme', 'r06-conforme');
+    return;
+  }
+  const media = (vals[0] + vals[1] + vals[2]) / 3;
+  const mediaR = Math.round(media * 10) / 10;
+  const r = validarTemperatura(ref, mediaR);
+  if (r.ok) {
+    elMedia.textContent = 'Media: ' + mediaR.toFixed(1) + ' °C ✓ Conforme';
+    elEst.textContent = '✓';
+    elEst.className = 'r06-estado ok';
+    fila.classList.add('r06-conforme');
+    fila.classList.remove('r06-noconforme');
+  } else {
+    elMedia.textContent = 'Media: ' + mediaR.toFixed(1) + ' °C ⚠ ' + (r.mensaje || 'No conforme');
+    elEst.textContent = '⚠';
+    elEst.className = 'r06-estado ko';
+    fila.classList.add('r06-noconforme');
+    fila.classList.remove('r06-conforme');
+  }
+}
+
+async function guardarR06() {
+  const sem = semanaISO();
+  const obs = document.getElementById('r06-obs').value.trim();
+  const filasEq = document.querySelectorAll('.r06-equipo');
+  const filas = [];
+  const incompletos = [];
+  const noConformes = [];
+  filasEq.forEach(fila => {
+    const eq = fila.dataset.equipo;
+    const ref = fila.dataset.referencia;
+    const inputs = fila.querySelectorAll('input[data-r06-idx]');
+    const vals = [];
+    let alguno = false;
+    inputs.forEach(i => {
+      const v = i.value.replace(',', '.').trim();
+      if (v !== '' && v !== '-') alguno = true;
+      const n = parseFloat(v);
+      vals.push(isNaN(n) ? null : n);
+    });
+    if (!alguno) return;
+    if (vals[0] === null || vals[1] === null || vals[2] === null) {
+      incompletos.push(eq);
+      return;
+    }
+    const media = Math.round(((vals[0] + vals[1] + vals[2]) / 3) * 10) / 10;
+    const r = validarTemperatura(ref, media);
+    const conf = r.ok ? 'Conforme' : 'No Conforme';
+    if (!r.ok) noConformes.push(eq + ' (media ' + media.toFixed(1) + '°C)');
+    filas.push({
+      'Semana': sem.texto,
+      'Equipo': eq,
+      'Tª_Pos_1': vals[0],
+      'Tª_Pos_2': vals[1],
+      'Tª_Pos_3': vals[2],
+      'Media': media,
+      'Conforme_NoConforme': conf,
+      'Observaciones': obs
+    });
+  });
+
+  if (incompletos.length > 0) {
+    toast('Faltan posiciones por rellenar en: ' + incompletos.join(', '), true);
+    return;
+  }
+  if (filas.length === 0) {
+    toast('Rellena al menos un equipo (3 posiciones)', true);
+    return;
+  }
+
+  document.getElementById('btn-guardar').disabled = true;
+  const batch = { accion: 'guardarBatch', codigo: 'R06', local: state.local, encargado: state.encargado, filas: filas };
+  let okCount = 0; let pendientes = 0;
+  if (!navigator.onLine) {
+    LS.encolar({ tipo: 'batch', payload: batch });
+    pendientes = filas.length;
+  } else {
+    try {
+      const r = await apiPost(batch);
+      if (r && r.ok) okCount = filas.length;
+      else { LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length; }
+    } catch (e) {
+      LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length;
+    }
+  }
+  LS.marcarHecho('R06', state.encargado);
+  actualizarBarra();
+  document.getElementById('btn-guardar').disabled = false;
+  const resumen = ['Verificados ' + filas.length + ' equipos (' + sem.texto + ')'];
+  if (noConformes.length > 0) resumen.push('⚠ No Conformes: ' + noConformes.join('; '));
+  else resumen.push('✓ Todos los equipos conformes');
+  if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir cuando vuelva la conexión —');
+  if (obs) resumen.push('Obs.: ' + obs);
+  mostrarExito('R06', 'Verificación equipos de frío', horaAhora(), resumen);
 }
 
 
