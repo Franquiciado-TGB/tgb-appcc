@@ -1,4 +1,4 @@
-/* TGB APPCC - Frontend Tanda 1+2 (R04, R05, R07, R02, R08, R10) - v1.2 */
+/* TGB APPCC - Frontend Tanda 1+2 (R04, R05, R07, R02, R08, R10) - v1.3 (batch) */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYS3T8NpXq2FYSmoA_6RouqTczhTSVPJwwj1IK0mkbpb5Vwzfh5nyQd3FzUJ-N7r37Iw/exec';
 
@@ -142,16 +142,27 @@ window.addEventListener('online', () => { actualizarBarra(); sincronizarCola(); 
 window.addEventListener('offline', actualizarBarra);
 
 async function sincronizarCola() {
-if (!navigator.onLine) return;
-const cola = LS.cola();
-if (cola.length === 0) return;
-const restantes = [];
-for (const it of cola) {
-try { const r = await apiPost(it.payload); if (!r.ok) restantes.push(it); } catch (e) { restantes.push(it); }
-}
-LS.setCola(restantes);
-actualizarBarra();
-if (restantes.length === 0 && cola.length > 0) toast('Sincronizados ' + cola.length);
+  if (!navigator.onLine) return;
+  const cola = LS.cola();
+  if (cola.length === 0) return;
+  const restantes = [];
+  let okEnviados = 0;
+  for (const it of cola) {
+    const payload = it && it.payload ? it.payload : it;
+    try {
+      const r = await apiPost(payload);
+      if (r && r.ok) {
+        okEnviados += (payload && payload.accion === 'guardarBatch' && Array.isArray(payload.filas)) ? payload.filas.length : 1;
+      } else {
+        restantes.push(it);
+      }
+    } catch (e) {
+      restantes.push(it);
+    }
+  }
+  LS.setCola(restantes);
+  actualizarBarra();
+  if (restantes.length === 0 && okEnviados > 0) toast('Sincronizados ' + okEnviados);
 }
 
 document.querySelectorAll('#p1 .btn').forEach(b => {
@@ -549,111 +560,134 @@ enviar({ accion:'guardar', codigo:'R05', local: state.local, encargado: state.en
 }
 
 async function guardarR07() {
-const meds = document.querySelectorAll('#r07-mediciones .r07-medicion');
-if (meds.length === 0) { toast('Añade al menos una medición', true); return; }
-const errores = []; const payloads = []; const resumenLineas = [];
-meds.forEach((d, i) => {
-const eq = d.querySelector('.r07-equipo').value;
-const tipo = d.querySelector('.r07-tipo').value;
-const prod = d.querySelector('.r07-producto').value.trim();
-const temp = d.querySelector('.r07-temp').value.replace(',', '.').trim();
-if (!prod) errores.push('Medición ' + (i+1) + ': falta producto');
-if (!temp || isNaN(parseFloat(temp))) errores.push('Medición ' + (i+1) + ': temperatura no válida');
-payloads.push({ accion:'guardar', codigo:'R07', local: state.local, encargado: state.encargado,
-datos: { 'Día': fechaHoy(), 'Equipo': eq, 'Producto': prod, 'Temperatura': parseFloat(temp), 'Tipo': tipo } });
-resumenLineas.push(eq + ' · ' + prod + ' · ' + temp + '°C (' + tipo + ')');
-});
-if (errores.length) { toast(errores[0], true); return; }
-document.getElementById('btn-guardar').disabled = true;
-let okCount = 0; let pendientes = 0;
-for (const p of payloads) {
-if (!navigator.onLine) { LS.encolar(p); pendientes++; continue; }
-try { const r = await apiPost(p); if (r && r.ok) okCount++; else { LS.encolar(p); pendientes++; } } catch (e) { LS.encolar(p); pendientes++; }
-}
-LS.marcarHecho('R07', state.encargado);
-actualizarBarra();
-document.getElementById('btn-guardar').disabled = false;
-const resumen = ['Guardadas ' + (okCount + pendientes) + ' mediciones'];
-if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir cuando vuelva la conexión —');
-resumen.push.apply(resumen, resumenLineas);
-mostrarExito('R07', 'Tª elaboración / regeneración', horaAhora(), resumen);
+  const meds = document.querySelectorAll('#r07-mediciones .r07-medicion');
+  if (meds.length === 0) { toast('Añade al menos una medición', true); return; }
+  const errores = []; const filas = []; const resumenLineas = [];
+  meds.forEach((d, i) => {
+    const eq = d.querySelector('.r07-equipo').value;
+    const tipo = d.querySelector('.r07-tipo').value;
+    const prod = d.querySelector('.r07-producto').value.trim();
+    const temp = d.querySelector('.r07-temp').value.replace(',', '.').trim();
+    if (!prod) errores.push('Medición ' + (i+1) + ': falta producto');
+    if (!temp || isNaN(parseFloat(temp))) errores.push('Medición ' + (i+1) + ': temperatura no válida');
+    filas.push({ 'Día': fechaHoy(), 'Equipo': eq, 'Producto': prod, 'Temperatura': parseFloat(temp), 'Tipo': tipo });
+    resumenLineas.push(eq + ' · ' + prod + ' · ' + temp + '°C (' + tipo + ')');
+  });
+  if (errores.length) { toast(errores[0], true); return; }
+  document.getElementById('btn-guardar').disabled = true;
+  const batch = { accion: 'guardarBatch', codigo: 'R07', local: state.local, encargado: state.encargado, filas: filas };
+  let okCount = 0; let pendientes = 0;
+  if (!navigator.onLine) {
+    LS.encolar({ tipo: 'batch', payload: batch });
+    pendientes = filas.length;
+  } else {
+    try {
+      const r = await apiPost(batch);
+      if (r && r.ok) okCount = filas.length;
+      else { LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length; }
+    } catch (e) {
+      LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length;
+    }
+  }
+  LS.marcarHecho('R07', state.encargado);
+  actualizarBarra();
+  document.getElementById('btn-guardar').disabled = false;
+  const resumen = ['Guardadas ' + (okCount + pendientes) + ' mediciones'];
+  if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir cuando vuelva la conexión —');
+  resumen.push.apply(resumen, resumenLineas);
+  mostrarExito('R07', 'Tª elaboración / regeneración', horaAhora(), resumen);
 }
 
 async function guardarR02() {
-const cks = document.querySelectorAll('.r02-check');
-const marcadas = Array.from(cks).filter(c => c.checked);
-const obs = document.getElementById('r02-obs').value.trim();
-const hora = horaAhora();
-if (marcadas.length === 0) { toast('Marca al menos una zona limpiada', true); return; }
-const payloads = [];
-const resumenLineas = [];
-marcadas.forEach(c => {
-payloads.push({ accion:'guardar', codigo:'R02', local: state.local, encargado: state.encargado,
-datos: { 'Día': fechaHoy(), 'Zona': c.dataset.zona, 'Equipo': c.dataset.equipo, 'Realizado': 'Sí', 'Observaciones': obs } });
-});
-ZONAS_R02.forEach((z, i) => {
-const ck = document.querySelector('.r02-check[data-idx="' + i + '"]');
-if (ck && !ck.checked) {
-payloads.push({ accion:'guardar', codigo:'R02', local: state.local, encargado: state.encargado,
-datos: { 'Día': fechaHoy(), 'Zona': z.zona, 'Equipo': z.equipo, 'Realizado': 'No', 'Observaciones': obs } });
-}
-});
-resumenLineas.push(marcadas.length + ' de ' + ZONAS_R02.length + ' zonas marcadas como limpiadas');
-const noLimpiadas = ZONAS_R02.length - marcadas.length;
-if (noLimpiadas > 0) resumenLineas.push('⚠ ' + noLimpiadas + ' zonas sin limpiar (registradas como No)');
-else resumenLineas.push('✓ Todas las zonas limpiadas');
-document.getElementById('btn-guardar').disabled = true;
-let okCount = 0; let pendientes = 0;
-for (const p of payloads) {
-if (!navigator.onLine) { LS.encolar(p); pendientes++; continue; }
-try { const r = await apiPost(p); if (r && r.ok) okCount++; else { LS.encolar(p); pendientes++; } } catch (e) { LS.encolar(p); pendientes++; }
-}
-LS.marcarHecho('R02', state.encargado);
-actualizarBarra();
-document.getElementById('btn-guardar').disabled = false;
-if (pendientes > 0) resumenLineas.push('— ' + pendientes + ' filas pendientes de subir —');
-mostrarExito('R02', 'Limpieza y desinfección', hora, resumenLineas);
+  const cks = document.querySelectorAll('.r02-check');
+  const marcadas = Array.from(cks).filter(c => c.checked);
+  const obs = document.getElementById('r02-obs').value.trim();
+  const hora = horaAhora();
+  if (marcadas.length === 0) { toast('Marca al menos una zona limpiada', true); return; }
+  const filas = [];
+  const resumenLineas = [];
+  marcadas.forEach(c => {
+    filas.push({ 'Día': fechaHoy(), 'Zona': c.dataset.zona, 'Equipo': c.dataset.equipo, 'Realizado': 'Sí', 'Observaciones': obs });
+  });
+  ZONAS_R02.forEach((z, i) => {
+    const ck = document.querySelector('.r02-check[data-idx="' + i + '"]');
+    if (ck && !ck.checked) {
+      filas.push({ 'Día': fechaHoy(), 'Zona': z.zona, 'Equipo': z.equipo, 'Realizado': 'No', 'Observaciones': obs });
+    }
+  });
+  resumenLineas.push(marcadas.length + ' de ' + ZONAS_R02.length + ' zonas marcadas como limpiadas');
+  const noLimpiadas = ZONAS_R02.length - marcadas.length;
+  if (noLimpiadas > 0) resumenLineas.push('⚠ ' + noLimpiadas + ' zonas sin limpiar (registradas como No)');
+  else resumenLineas.push('✓ Todas las zonas limpiadas');
+  document.getElementById('btn-guardar').disabled = true;
+  const batch = { accion: 'guardarBatch', codigo: 'R02', local: state.local, encargado: state.encargado, filas: filas };
+  let okCount = 0; let pendientes = 0;
+  if (!navigator.onLine) {
+    LS.encolar({ tipo: 'batch', payload: batch });
+    pendientes = filas.length;
+  } else {
+    try {
+      const r = await apiPost(batch);
+      if (r && r.ok) okCount = filas.length;
+      else { LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length; }
+    } catch (e) {
+      LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length;
+    }
+  }
+  LS.marcarHecho('R02', state.encargado);
+  actualizarBarra();
+  document.getElementById('btn-guardar').disabled = false;
+  if (pendientes > 0) resumenLineas.push('— ' + pendientes + ' filas pendientes de subir —');
+  mostrarExito('R02', 'Limpieza y desinfección', hora, resumenLineas);
 }
 
 async function guardarR08() {
-const lavs = document.querySelectorAll('#r08-lavados .r07-medicion');
-if (lavs.length === 0) { toast('Añade al menos un lavado', true); return; }
-const errores = []; const payloads = []; const resumenLineas = []; const fueraRango = [];
-lavs.forEach((d, i) => {
-const tipo = d.querySelector('.r08-tipo').value;
-const prod = d.querySelector('.r08-producto').value.trim();
-const ini = d.querySelector('.r08-ini').value;
-const fin = d.querySelector('.r08-fin').value;
-const aguaT = d.querySelector('.r08-agua').value.replace(',', '.').trim();
-const dosisT = d.querySelector('.r08-dosis').value.replace(',', '.').trim();
-const acl = d.querySelector('input[name="r08-acl-' + i + '"]:checked').value;
-if (!prod) errores.push('Lavado ' + (i+1) + ': falta producto');
-if (!aguaT || isNaN(parseFloat(aguaT))) errores.push('Lavado ' + (i+1) + ': cantidad de agua no válida');
-if (!dosisT || isNaN(parseFloat(dosisT))) errores.push('Lavado ' + (i+1) + ': dosis no válida');
-const dosis = parseFloat(dosisT);
-if (!isNaN(dosis) && (dosis < 50 || dosis > 100)) fueraRango.push('Lavado ' + (i+1) + ': dosis ' + dosisT + ' mg/L fuera de 50–100');
-if (acl === 'No') fueraRango.push('Lavado ' + (i+1) + ': aclarado NO realizado');
-payloads.push({ accion:'guardar', codigo:'R08', local: state.local, encargado: state.encargado,
-datos: { 'Día': fechaHoy(), 'Tipo': tipo, 'Hora_Inicio': ini, 'Hora_Fin': fin, 'Producto': prod,
-'Cantidad_Agua_L': parseFloat(aguaT), 'Dosis_mgL': dosis, 'Aclarado_OK': acl } });
-resumenLineas.push(tipo + ' · ' + prod + ' · ' + dosisT + ' mg/L · aclarado ' + acl);
-});
-if (errores.length) { toast(errores[0], true); return; }
-document.getElementById('btn-guardar').disabled = true;
-let okCount = 0; let pendientes = 0;
-for (const p of payloads) {
-if (!navigator.onLine) { LS.encolar(p); pendientes++; continue; }
-try { const r = await apiPost(p); if (r && r.ok) okCount++; else { LS.encolar(p); pendientes++; } } catch (e) { LS.encolar(p); pendientes++; }
-}
-LS.marcarHecho('R08', state.encargado);
-actualizarBarra();
-document.getElementById('btn-guardar').disabled = false;
-const resumen = [(okCount + pendientes) + ' lavados registrados'];
-if (fueraRango.length > 0) { resumen.push('⚠ ' + fueraRango.length + ' incidencias:'); resumen.push.apply(resumen, fueraRango); }
-else resumen.push('✓ Todos dentro de rango y aclarados');
-if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir —');
-resumen.push.apply(resumen, resumenLineas);
-mostrarExito('R08', 'Higienización vegetales y frutas', horaAhora(), resumen);
+  const lavs = document.querySelectorAll('#r08-lavados .r07-medicion');
+  if (lavs.length === 0) { toast('Añade al menos un lavado', true); return; }
+  const errores = []; const filas = []; const resumenLineas = []; const fueraRango = [];
+  lavs.forEach((d, i) => {
+    const tipo = d.querySelector('.r08-tipo').value;
+    const prod = d.querySelector('.r08-producto').value.trim();
+    const ini = d.querySelector('.r08-ini').value;
+    const fin = d.querySelector('.r08-fin').value;
+    const aguaT = d.querySelector('.r08-agua').value.replace(',', '.').trim();
+    const dosisT = d.querySelector('.r08-dosis').value.replace(',', '.').trim();
+    const acl = d.querySelector('input[name="r08-acl-' + i + '"]:checked').value;
+    if (!prod) errores.push('Lavado ' + (i+1) + ': falta producto');
+    if (!aguaT || isNaN(parseFloat(aguaT))) errores.push('Lavado ' + (i+1) + ': cantidad de agua no válida');
+    if (!dosisT || isNaN(parseFloat(dosisT))) errores.push('Lavado ' + (i+1) + ': dosis no válida');
+    const dosis = parseFloat(dosisT);
+    if (!isNaN(dosis) && (dosis < 50 || dosis > 100)) fueraRango.push('Lavado ' + (i+1) + ': dosis ' + dosisT + ' mg/L fuera de 50–100');
+    if (acl === 'No') fueraRango.push('Lavado ' + (i+1) + ': aclarado NO realizado');
+    filas.push({ 'Día': fechaHoy(), 'Tipo': tipo, 'Hora_Inicio': ini, 'Hora_Fin': fin, 'Producto': prod,
+      'Cantidad_Agua_L': parseFloat(aguaT), 'Dosis_mgL': dosis, 'Aclarado_OK': acl });
+    resumenLineas.push(tipo + ' · ' + prod + ' · ' + dosisT + ' mg/L · aclarado ' + acl);
+  });
+  if (errores.length) { toast(errores[0], true); return; }
+  document.getElementById('btn-guardar').disabled = true;
+  const batch = { accion: 'guardarBatch', codigo: 'R08', local: state.local, encargado: state.encargado, filas: filas };
+  let okCount = 0; let pendientes = 0;
+  if (!navigator.onLine) {
+    LS.encolar({ tipo: 'batch', payload: batch });
+    pendientes = filas.length;
+  } else {
+    try {
+      const r = await apiPost(batch);
+      if (r && r.ok) okCount = filas.length;
+      else { LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length; }
+    } catch (e) {
+      LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length;
+    }
+  }
+  LS.marcarHecho('R08', state.encargado);
+  actualizarBarra();
+  document.getElementById('btn-guardar').disabled = false;
+  const resumen = [(okCount + pendientes) + ' lavados registrados'];
+  if (fueraRango.length > 0) { resumen.push('⚠ ' + fueraRango.length + ' incidencias:'); resumen.push.apply(resumen, fueraRango); }
+  else resumen.push('✓ Todos dentro de rango y aclarados');
+  if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir —');
+  resumen.push.apply(resumen, resumenLineas);
+  mostrarExito('R08', 'Higienización vegetales y frutas', horaAhora(), resumen);
 }
 
 function guardarR10() {
