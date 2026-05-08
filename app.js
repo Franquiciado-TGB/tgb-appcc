@@ -1,9 +1,9 @@
-/* TGB APPCC - Frontend Completo (R02-R11) - v1.6 (batch) */
+/* TGB APPCC - Frontend Completo (R01-R11) - v1.7 (batch) */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYS3T8NpXq2FYSmoA_6RouqTczhTSVPJwwj1IK0mkbpb5Vwzfh5nyQd3FzUJ-N7r37Iw/exec';
 
 const state = { local: null, encargado: null, estadoDia: {}, configEquipos: [], registroActual: null };
-const REGISTROS_DEFINIDOS = ['R02','R04','R05','R06','R07','R08','R09','R10','R11'];
+const REGISTROS_DEFINIDOS = ['R01','R02','R04','R05','R06','R07','R08','R09','R10','R11'];
 const TODOS_REGISTROS = [
 { cod:'R01', nombre:'Formación de personal', frec:'Eventual' },
 { cod:'R02', nombre:'Limpieza y desinfección', frec:'Diaria' },
@@ -246,7 +246,8 @@ document.getElementById('p4-subtitulo').textContent = fechaHoy() + ' · ' + stat
 document.getElementById('p4-alerta').classList.add('hidden');
 const cont = document.getElementById('p4-formulario');
 cont.innerHTML = '';
-if (cod === 'R02') pintarFormR02(cont);
+if (cod === 'R01') pintarFormR01(cont);
+  else if (cod === 'R02') pintarFormR02(cont);
 else if (cod === 'R04') pintarFormR04(cont);
 else if (cod === 'R05') pintarFormR05(cont);
 else if (cod === 'R07') pintarFormR07(cont);
@@ -462,7 +463,8 @@ validarEnVivo(cont);
 
 document.getElementById('btn-guardar').addEventListener('click', async () => {
 const cod = state.registroActual;
-if (cod === 'R02') return guardarR02();
+if (cod === 'R01') return guardarR01();
+  if (cod === 'R02') return guardarR02();
 if (cod === 'R04') return guardarR04();
 if (cod === 'R05') return guardarR05();
 if (cod === 'R07') return guardarR07();
@@ -1160,3 +1162,122 @@ const lastEnc = LS.encargado();
 if (lastLocal && lastEnc) { state.local = lastLocal; state.encargado = lastEnc; irP3(); }
 else if (lastLocal) { state.local = lastLocal; irP2(); }
 })();
+
+// ============================================================
+// R01 - Formación de personal (v1.7 batch)
+// ============================================================
+const R01_ACCIONES = [
+  'Manipulación de alimentos',
+  'APPCC / Higiene alimentaria',
+  'Alérgenos e intolerancias',
+  'Limpieza y desinfección',
+  'Seguridad e higiene en el puesto',
+  'Procedimientos TGB (parrilla, freidoras, etc.)',
+  'Atención al cliente',
+  'PRL básico',
+  'Otro'
+];
+
+function pintarFormR01(cont) {
+  const opciones = R01_ACCIONES.map(a => '<option value="' + a + '">' + a + '</option>').join('');
+  cont.insertAdjacentHTML('beforeend',
+    '<div class="r01-wrap">' +
+      '<div class="r01-cabecera">' +
+        '<label>Acción formativa<select id="r01-accion"><option value="">— Selecciona —</option>' + opciones + '</select></label>' +
+        '<label id="r01-otro-wrap" class="hidden">Indica cuál<input type="text" id="r01-otro" placeholder="Describe la formación"></label>' +
+        '<label>Fecha del curso<input type="date" id="r01-fecha" value="' + fechaHoy() + '"></label>' +
+      '</div>' +
+      '<div class="r01-alumnos">' +
+        '<div class="r01-alumnos-header">' +
+          '<h4>Alumnos formados</h4>' +
+          '<button type="button" id="r01-add" class="btn-secundario">+ Añadir alumno</button>' +
+        '</div>' +
+        '<div id="r01-lista"></div>' +
+      '</div>' +
+    '</div>'
+  );
+
+  const sel = document.getElementById('r01-accion');
+  const otroWrap = document.getElementById('r01-otro-wrap');
+  sel.addEventListener('change', () => {
+    if (sel.value === 'Otro') otroWrap.classList.remove('hidden');
+    else otroWrap.classList.add('hidden');
+  });
+
+  document.getElementById('r01-add').addEventListener('click', () => anadirAlumnoR01());
+  anadirAlumnoR01();
+}
+
+function anadirAlumnoR01() {
+  const lista = document.getElementById('r01-lista');
+  const idx = lista.children.length + 1;
+  const fila = document.createElement('div');
+  fila.className = 'r01-fila';
+  fila.innerHTML =
+    '<span class="r01-num">' + idx + '</span>' +
+    '<input type="text" class="r01-nombre" placeholder="Nombre del alumno">' +
+    '<input type="text" class="r01-dni" placeholder="DNI" maxlength="15">' +
+    '<button type="button" class="btn-quitar" title="Quitar">×</button>';
+  fila.querySelector('.btn-quitar').addEventListener('click', () => {
+    if (lista.children.length <= 1) {
+      toast('Debe haber al menos un alumno');
+      return;
+    }
+    fila.remove();
+    renumerarR01();
+  });
+  lista.appendChild(fila);
+}
+
+function renumerarR01() {
+  document.querySelectorAll('#r01-lista .r01-fila').forEach((f, i) => {
+    f.querySelector('.r01-num').textContent = (i + 1);
+  });
+}
+
+async function guardarR01() {
+  const sel = document.getElementById('r01-accion');
+  const otro = document.getElementById('r01-otro');
+  const fecha = document.getElementById('r01-fecha').value;
+  let accion = sel.value;
+  if (!accion) { mostrarAlerta('Selecciona la acción formativa'); return; }
+  if (accion === 'Otro') {
+    const t = (otro.value || '').trim();
+    if (!t) { mostrarAlerta('Indica cuál es la formación'); return; }
+    accion = t;
+  }
+  if (!fecha) { mostrarAlerta('Indica la fecha del curso'); return; }
+
+  const filas = document.querySelectorAll('#r01-lista .r01-fila');
+  const alumnos = [];
+  for (let i = 0; i < filas.length; i++) {
+    const nombre = filas[i].querySelector('.r01-nombre').value.trim();
+    const dni = filas[i].querySelector('.r01-dni').value.trim();
+    if (!nombre || !dni) {
+      mostrarAlerta('Completa nombre y DNI del alumno ' + (i + 1));
+      return;
+    }
+    alumnos.push({ nombre, dni });
+  }
+  if (!alumnos.length) { mostrarAlerta('Añade al menos un alumno'); return; }
+
+  const hora = horaAhora();
+  const filasPayload = alumnos.map(a => ({
+    Local: state.local,
+    Encargado: state.encargado,
+    Alumno: a.nombre,
+    DNI: a.dni,
+    Accion_Formativa: accion,
+    Fecha_Curso: fecha
+  }));
+
+  const payload = { tipo: 'R01_BATCH', filas: filasPayload };
+  const resumen = [
+    'Acción: ' + accion,
+    'Fecha: ' + fecha,
+    'Alumnos: ' + alumnos.length,
+    ...alumnos.map((a, i) => '  ' + (i + 1) + '. ' + a.nombre + ' (' + a.dni + ')')
+  ];
+  await enviar(payload, 'R01', 'Formación de personal', hora, resumen);
+}
+
