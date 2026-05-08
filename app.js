@@ -1,9 +1,9 @@
-/* TGB APPCC - Frontend Tanda 1+2+3+4 (R04, R05, R07, R02, R08, R10, R09, R06) - v1.5 (batch) */
+/* TGB APPCC - Frontend Completo (R02-R11) - v1.6 (batch) */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYS3T8NpXq2FYSmoA_6RouqTczhTSVPJwwj1IK0mkbpb5Vwzfh5nyQd3FzUJ-N7r37Iw/exec';
 
 const state = { local: null, encargado: null, estadoDia: {}, configEquipos: [], registroActual: null };
-const REGISTROS_DEFINIDOS = ['R02','R04','R05','R06','R07','R08','R09','R10'];
+const REGISTROS_DEFINIDOS = ['R02','R04','R05','R06','R07','R08','R09','R10','R11'];
 const TODOS_REGISTROS = [
 { cod:'R01', nombre:'Formación de personal', frec:'Eventual' },
 { cod:'R02', nombre:'Limpieza y desinfección', frec:'Diaria' },
@@ -254,6 +254,7 @@ else if (cod === 'R08') pintarFormR08(cont);
 else if (cod === 'R06') pintarFormR06(cont);
 else if (cod === 'R09') pintarFormR09(cont);
 else if (cod === 'R10') pintarFormR10(cont);
+else if (cod === 'R11') pintarFormR11(cont);
 mostrarPantalla('p4');
 }
 
@@ -469,6 +470,7 @@ if (cod === 'R08') return guardarR08();
 if (cod === 'R06') return guardarR06();
 if (cod === 'R09') return guardarR09();
 if (cod === 'R10') return guardarR10();
+if (cod === 'R11') return guardarR11();
 });
 
 function recolectarTemperaturas(mapeo) {
@@ -720,6 +722,139 @@ const resumen = ['Cloro libre: ' + libreT + ' mg/L', 'Cloro combinado: ' + combT
 if (fueraRango.length > 0) { resumen.push('⚠ ' + fueraRango.length + ' fuera de rango'); }
 else resumen.push('✓ Todos los valores dentro de rango');
 enviar({ accion:'guardar', codigo:'R10', local: state.local, encargado: state.encargado, datos: datos }, 'R10', 'Cloro y pH del agua', horaAhora(), resumen);
+}
+
+
+const R11_FREIDORAS = ['Freidora 1', 'Freidora 2', 'Freidora 3'];
+
+function pintarFormR11(cont) {
+  let h = '';
+  R11_FREIDORAS.forEach((nombre, idx) => {
+    h += '<div class="r11-freidora" data-idx="' + idx + '" data-nombre="' + nombre + '">';
+    h += '<div class="r11-cab">' + nombre + '</div>';
+    h += '<div class="r11-grid">';
+    h += '<div class="r11-campo"><label>Temperatura (°C)</label>' + htmlInputTempR11(idx) + '</div>';
+    h += '<div class="r11-campo"><label>Filtrado</label><select class="r11-filtrado"><option value="">—</option><option>Sí</option><option>No</option></select></div>';
+    h += '<div class="r11-campo"><label>Cambio</label><select class="r11-cambio"><option value="">—</option><option>Sí</option><option>No</option></select></div>';
+    h += '<div class="r11-campo"><label>Test</label><select class="r11-test"><option value="">—</option><option>Apto</option><option>No Apto</option><option>No realizado</option></select></div>';
+    h += '</div>';
+    h += '<div class="r11-lote-wrap hidden"><label>Lote aceite nuevo</label><input type="text" class="r11-lote" placeholder="Ej. L240508-A"></div>';
+    h += '<div class="r11-aviso" id="r11-aviso-' + idx + '"></div>';
+    h += '</div>';
+  });
+  h += '<label>Observaciones (opcional)</label><textarea id="r11-obs" rows="2" placeholder="Observaciones generales..."></textarea>';
+  cont.innerHTML = h;
+
+  activarBotonesSigno(cont);
+
+  cont.querySelectorAll('.r11-freidora').forEach(f => {
+    const selCambio = f.querySelector('.r11-cambio');
+    const loteWrap = f.querySelector('.r11-lote-wrap');
+    const inpTemp = f.querySelector('input[data-r11-idx]');
+    const selTest = f.querySelector('.r11-test');
+    const refresh = () => recalcularR11(f);
+    selCambio.addEventListener('change', () => {
+      if (selCambio.value === 'Sí') loteWrap.classList.remove('hidden');
+      else { loteWrap.classList.add('hidden'); f.querySelector('.r11-lote').value = ''; }
+      refresh();
+    });
+    inpTemp.addEventListener('input', refresh);
+    selTest.addEventListener('change', refresh);
+    f.querySelector('.r11-filtrado').addEventListener('change', refresh);
+  });
+}
+
+function htmlInputTempR11(idx) {
+  return '<div class="temp-wrap">'
+    + '<button type="button" class="btn-signo">+/-</button>'
+    + '<input type="text" inputmode="decimal" pattern="-?[0-9]*[.,]?[0-9]*" data-r11-idx="' + idx + '" placeholder="°C">'
+    + '</div>';
+}
+
+function recalcularR11(fila) {
+  const idx = fila.dataset.idx;
+  const aviso = document.getElementById('r11-aviso-' + idx);
+  const tempT = fila.querySelector('input[data-r11-idx]').value.replace(',', '.').trim();
+  const test = fila.querySelector('.r11-test').value;
+  const cambio = fila.querySelector('.r11-cambio').value;
+  const avisos = [];
+  if (tempT && !isNaN(parseFloat(tempT))) {
+    const t = parseFloat(tempT);
+    if (t > 180) avisos.push('⚠ Temperatura > 180°C (recomendado ≤ 180°C)');
+  }
+  if (test === 'No Apto' && cambio === 'No') {
+    avisos.push('⚠ Aceite no apto: valora cambiarlo');
+  }
+  aviso.innerHTML = avisos.join('<br>');
+  aviso.className = 'r11-aviso' + (avisos.length > 0 ? ' activo' : '');
+}
+
+async function guardarR11() {
+  const obs = document.getElementById('r11-obs').value.trim();
+  const filasEq = document.querySelectorAll('.r11-freidora');
+  const filas = [];
+  const errores = [];
+  const avisos = [];
+  filasEq.forEach(fila => {
+    const nombre = fila.dataset.nombre;
+    const tempT = fila.querySelector('input[data-r11-idx]').value.replace(',', '.').trim();
+    const filtrado = fila.querySelector('.r11-filtrado').value;
+    const cambio = fila.querySelector('.r11-cambio').value;
+    const test = fila.querySelector('.r11-test').value;
+    const lote = fila.querySelector('.r11-lote').value.trim();
+    if (!tempT && !filtrado && !cambio && !test) return;
+    if (!tempT) { errores.push(nombre + ': falta Temperatura'); return; }
+    if (isNaN(parseFloat(tempT))) { errores.push(nombre + ': Temperatura no numérica'); return; }
+    if (!filtrado) { errores.push(nombre + ': falta Filtrado'); return; }
+    if (!cambio) { errores.push(nombre + ': falta Cambio'); return; }
+    if (!test) { errores.push(nombre + ': falta Test'); return; }
+    if (cambio === 'Sí' && !lote) { errores.push(nombre + ': cambio sin Lote nuevo'); return; }
+    const temp = parseFloat(tempT);
+    if (temp > 180) avisos.push(nombre + ' a ' + temp + '°C (>180°C)');
+    if (test === 'No Apto' && cambio === 'No') avisos.push(nombre + ' aceite No Apto sin cambio');
+    filas.push({
+      'Num_Freidora': nombre,
+      'Temperatura': temp,
+      'Filtrado': filtrado,
+      'Cambio': cambio,
+      'Test_Resultado': test,
+      'Lote_Nuevo': lote,
+      'Observaciones': obs
+    });
+  });
+
+  if (errores.length > 0) {
+    toast(errores[0], true);
+    return;
+  }
+  if (filas.length === 0) {
+    toast('Rellena al menos una freidora', true);
+    return;
+  }
+
+  document.getElementById('btn-guardar').disabled = true;
+  const batch = { accion: 'guardarBatch', codigo: 'R11', local: state.local, encargado: state.encargado, filas: filas };
+  let okCount = 0; let pendientes = 0;
+  if (!navigator.onLine) {
+    LS.encolar({ tipo: 'batch', payload: batch });
+    pendientes = filas.length;
+  } else {
+    try {
+      const r = await apiPost(batch);
+      if (r && r.ok) okCount = filas.length;
+      else { LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length; }
+    } catch (e) {
+      LS.encolar({ tipo: 'batch', payload: batch }); pendientes = filas.length;
+    }
+  }
+  LS.marcarHecho('R11', state.encargado);
+  actualizarBarra();
+  document.getElementById('btn-guardar').disabled = false;
+  const resumen = ['Registradas ' + filas.length + ' freidora' + (filas.length > 1 ? 's' : '')];
+  if (avisos.length > 0) resumen.push('⚠ ' + avisos.join('; '));
+  if (pendientes > 0) resumen.push('— ' + pendientes + ' pendientes de subir cuando vuelva la conexión —');
+  if (obs) resumen.push('Obs.: ' + obs);
+  mostrarExito('R11', 'Control aceite y freidoras', horaAhora(), resumen);
 }
 
 
