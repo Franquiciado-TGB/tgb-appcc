@@ -73,6 +73,24 @@ input.alerta{border-color:var(--rojo);background:rgba(255,59,59,.15);color:var(-
 .exito-card .resumen{list-style:none;padding:0}
 .exito-card .resumen li{padding:6px 0;font-size:14px;color:var(--crema);border-bottom:1px solid #2a2a2a}
 .exito-card .resumen li:last-child{border:none}
+
+.r06-equipo{background:var(--gris);padding:14px;margin-bottom:10px;border-left:4px solid #333}
+.r06-equipo.r06-conforme{border-left-color:var(--verde)}
+.r06-equipo.r06-noconforme{border-left-color:var(--rojo)}
+.r06-cab{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.r06-nombre{flex:1;font-size:15px;font-weight:700}
+.r06-nombre .ref{display:block;font-size:11px;color:#888;margin-top:2px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.r06-estado{font-size:22px;font-weight:900;width:34px;text-align:center}
+.r06-estado.ok{color:var(--verde)}
+.r06-estado.ko{color:var(--rojo)}
+.r06-pos{display:flex;gap:8px;margin-bottom:8px}
+.r06-pos-col{flex:1;display:flex;flex-direction:column;align-items:center}
+.r06-pos-lbl{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:4px}
+.r06-pos-col .temp-wrap{width:100%}
+.r06-media{font-size:13px;color:#ccc;font-weight:600;text-align:right;padding-top:4px;border-top:1px solid #2a2a2a}
+.r06-equipo.r06-noconforme .r06-media{color:var(--rojo)}
+.r06-equipo.r06-conforme .r06-media{color:var(--verde)}
+
 </style>
 </head>
 <body>
@@ -124,6 +142,8 @@ input.alerta{border-color:var(--rojo);background:rgba(255,59,59,.15);color:var(-
 </section>
 </div>
 <div id="toast" class="toast hidden"></div>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
+
+Stop Claude
